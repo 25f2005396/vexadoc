@@ -19,7 +19,7 @@ from api.models import (
     DocumentResponse, IngestResponse, DeleteResponse, HealthResponse
 )
 from retrieval.search import search, search_user_docs
-from generation.prompt import build_prompt
+from generation.prompt import build_prompt, build_general_knowledge_prompt
 from generation.llm import generate
 from generation.citations import build_citations
 from storage.vector_store import save_document, delete_document, list_documents
@@ -29,6 +29,7 @@ from ingestion.loader import ingest_document
 load_dotenv()
 
 router = APIRouter(tags=["Vexadoc"])
+
 
 # ── Health ─────────────────────────────────────────────────────
 @router.get("/health", response_model=HealthResponse)
@@ -49,16 +50,17 @@ def query(request: QueryRequest):
     Ask a question and get an AI-generated answer with citations.
 
     Body:
-        query:       Your question
-        top_k:       Number of chunks to retrieve (default 5)
-        source_type: "admin" or "user" (default "admin")
-        owner_id:    Required if source_type is "user"
+        query:          Your question
+        top_k:          Number of chunks to retrieve (default 5)
+        source_type:    "admin" or "user" (default "admin")
+        owner_id:       Required if source_type is "user"
+        use_general_ai: True to allow AI general knowledge fallback
     """
     if not request.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
     try:
-        # Step 1: Retrieve
+        # ── Step 1: Retrieve ───────────────────────────────────
         if request.source_type == "user" and request.owner_id:
             results = search_user_docs(
                 request.query,
@@ -70,31 +72,45 @@ def query(request: QueryRequest):
 
         chunks = results["results"]
 
-        # Step 2: Handle empty retrieval — avoid unnecessary LLM call
+        # ── Step 2: No chunks found ────────────────────────────
         if not chunks:
-            return {
-                "query":       request.query,
-                "answer":      "I couldn't find any relevant information in the indexed documents.",
-                "citations":   [],
-                "chunks_used": 0,
-                "provider":    os.getenv("LLM_PROVIDER", "groq")
-            }
+            if request.use_general_ai:
+                prompt = build_general_knowledge_prompt(request.query)
+                answer = generate(prompt)
+                return {
+                    "query":         request.query,
+                    "answer":        answer,
+                    "citations":     [],
+                    "chunks_used":   0,
+                    "provider":      os.getenv("LLM_PROVIDER", "groq"),
+                    "answer_source": "general_ai"
+                }
+            else:
+                return {
+                    "query":         request.query,
+                    "answer":        "I couldn't find that information in the uploaded documents.",
+                    "citations":     [],
+                    "chunks_used":   0,
+                    "provider":      os.getenv("LLM_PROVIDER", "groq"),
+                    "answer_source": "not_found"
+                }
 
-        # Step 3: Build prompt
+        # ── Step 3: Build RAG prompt ───────────────────────────
         prompt = build_prompt(request.query, chunks)
 
-        # Step 4: Generate answer
+        # ── Step 4: Generate answer ────────────────────────────
         answer = generate(prompt)
 
-        # Step 5: Build citations
+        # ── Step 5: Build citations ────────────────────────────
         citations = build_citations(chunks)
 
         return {
-            "query":       request.query,
-            "answer":      answer,
-            "citations":   citations,
-            "chunks_used": len(chunks),
-            "provider":    os.getenv("LLM_PROVIDER", "groq")
+            "query":         request.query,
+            "answer":        answer,
+            "citations":     citations,
+            "chunks_used":   len(chunks),
+            "provider":      os.getenv("LLM_PROVIDER", "groq"),
+            "answer_source": "documents"
         }
 
     except Exception as e:
@@ -115,29 +131,22 @@ async def ingest(file: UploadFile = File(...)):
             detail=f"Unsupported file type. Allowed: {allowed}"
         )
 
-    # Ensure upload directory exists
     os.makedirs("data/raw_docs", exist_ok=True)
     temp_path = f"data/raw_docs/{file.filename}"
 
     try:
-        # Save uploaded file temporarily
         contents = await file.read()
         with open(temp_path, "wb") as f:
             f.write(contents)
 
-        # Run ingestion pipeline
         result = ingest_document(temp_path, source_type="admin")
-
-        # Save to ChromaDB
         saved = save_document(result)
-
         return saved
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
     finally:
-        # Always clean up temp file
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
@@ -157,9 +166,6 @@ def get_documents():
 def remove_document(document_id: str):
     """
     Delete a document and all its chunks from the database.
-
-    Args:
-        document_id: The UUID of the document to delete
     """
     try:
         return delete_document(document_id)

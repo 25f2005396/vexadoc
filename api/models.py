@@ -14,6 +14,7 @@ class QueryRequest(BaseModel):
     top_k: Optional[int] = 5
     source_type: Optional[str] = "admin"
     owner_id: Optional[str] = None
+    use_general_ai: Optional[bool] = False
 
 
 # ── Response Models ────────────────────────────────────────────
@@ -33,6 +34,7 @@ class QueryResponse(BaseModel):
     citations: List[CitationResponse]
     chunks_used: int
     provider: str
+    answer_source: Optional[str] = "documents"
 
 
 class DocumentResponse(BaseModel):

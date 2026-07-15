@@ -8,9 +8,21 @@ __pycache__/
 # Environment
 .env
 
-# Local data — never commit documents
+# Local data
 data/raw_docs/
 data/processed/
+
+# ChromaDB (generated files)
+data/chroma_db/
+*.sqlite3
+*.bin
+
+# Next.js
+ui/.next/
+
+# Node modules
+node_modules/
+ui/node_modules/
 
 # VS Code
 .vscode/

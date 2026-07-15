@@ -35,6 +35,7 @@ def retrieve(
         raise ValueError("Query cannot be empty.")
 
     top_k = top_k or int(os.getenv("RETRIEVAL_TOP_K", 5))
+    MIN_SIMILARITY = 0.25   # Ignore anything below 25%
 
     # ── Step 1: Embed the query ────────────────────────────────
     query_embedding = embed_text(query)
@@ -69,11 +70,18 @@ def retrieve(
 
     # ── Step 5: Format results ─────────────────────────────────
     formatted = []
+
     for i in range(len(results["documents"][0])):
+        similarity = round(1 - results["distances"][0][i], 4)
+
+        # Skip weak matches
+        if similarity < MIN_SIMILARITY:
+            continue
+
         formatted.append({
-            "text":       results["documents"][0][i],
-            "metadata":   results["metadatas"][0][i],
-            "similarity": round(1 - results["distances"][0][i], 4),
+            "text": results["documents"][0][i],
+            "metadata": results["metadatas"][0][i],
+            "similarity": similarity,
         })
 
     return formatted
