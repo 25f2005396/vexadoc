@@ -17,7 +17,8 @@ def retrieve(
     query: str,
     top_k: int = None,
     source_type: str = None,
-    owner_id: str = None
+    owner_id: str = None,
+    document_id: str = None
 ) -> list[dict]:
     """
     Search ChromaDB for chunks most relevant to the query.
@@ -27,6 +28,7 @@ def retrieve(
         top_k:       Number of results to return (default from .env)
         source_type: Filter by "admin" or "user" (optional)
         owner_id:    Filter by uploader ID (optional)
+        document_id: Filter by specific document (active document mode)
 
     Returns:
         List of matching chunks with text, metadata, and similarity score
@@ -35,17 +37,21 @@ def retrieve(
         raise ValueError("Query cannot be empty.")
 
     top_k = top_k or int(os.getenv("RETRIEVAL_TOP_K", 5))
-    MIN_SIMILARITY = 0.25   # Ignore anything below 25%
+    MIN_SIMILARITY = 0.15   # Ignore anything below 15%
 
     # ── Step 1: Embed the query ────────────────────────────────
     query_embedding = embed_text(query)
 
     # ── Step 2: Build filters ──────────────────────────────────
     where = {}
-    if source_type:
-        where["source_type"] = source_type
-    if owner_id:
-        where["owner_id"] = owner_id
+    if document_id:
+        # document_id takes priority — ignores source_type/owner_id
+        where["document_id"] = document_id
+    else:
+        if source_type:
+            where["source_type"] = source_type
+        if owner_id:
+            where["owner_id"] = owner_id
 
     # ── Step 3: Search ChromaDB ────────────────────────────────
     try:
@@ -79,8 +85,8 @@ def retrieve(
             continue
 
         formatted.append({
-            "text": results["documents"][0][i],
-            "metadata": results["metadatas"][0][i],
+            "text":       results["documents"][0][i],
+            "metadata":   results["metadatas"][0][i],
             "similarity": similarity,
         })
 

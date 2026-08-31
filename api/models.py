@@ -4,7 +4,7 @@ Request and response schemas using Pydantic.
 """
 
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 
 # ── Request Models ─────────────────────────────────────────────
@@ -14,7 +14,8 @@ class QueryRequest(BaseModel):
     top_k: Optional[int] = 5
     source_type: Optional[str] = "admin"
     owner_id: Optional[str] = None
-    use_general_ai: Optional[bool] = False
+    mode: Literal["documents", "ai", "hybrid"] = "documents"
+    document_id: Optional[str] = None
 
 
 # ── Response Models ────────────────────────────────────────────

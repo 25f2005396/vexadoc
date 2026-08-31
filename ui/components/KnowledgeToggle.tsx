@@ -1,48 +1,53 @@
 /**
  * Vexadoc — Knowledge Toggle
- * Two-mode selector for knowledge source.
- * Future: add 🌐 Web Search as third mode.
+ * Three independent answer modes:
+ * - Documents: RAG pipeline, answers from uploaded files + citations
+ * - AI:        Direct LLM, like ChatGPT, no retrieval
+ * - Hybrid:    Documents first, supplements with AI knowledge
+ * Future: add 🌐 Web Search as fourth mode.
  */
 
 "use client";
 
+import { AnswerMode } from "@/lib/api";
+
 interface KnowledgeToggleProps {
-  useGeneralAI: boolean;
-  onChange: (value: boolean) => void;
+  mode: AnswerMode;
+  onChange: (mode: AnswerMode) => void;
 }
 
 export default function KnowledgeToggle({
-  useGeneralAI,
+  mode,
   onChange,
 }: KnowledgeToggleProps) {
+  const buttons: { value: AnswerMode; label: string }[] = [
+    { value: "documents", label: "📄 Documents" },
+    { value: "ai",        label: "🧠 AI" },
+    { value: "hybrid",    label: "📚 Hybrid" },
+  ];
+
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs text-gray-500 font-medium hidden sm:block">
-        Knowledge Source:
+        Answer Mode:
       </span>
       <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
-        <button
-          type="button"
-          onClick={() => onChange(false)}
-          className={`px-3 py-1.5 transition-colors ${
-            !useGeneralAI
-              ? "bg-blue-600 text-white font-medium"
-              : "bg-white text-gray-600 hover:bg-gray-50"
-          }`}
-        >
-          📄 Documents Only
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange(true)}
-          className={`px-3 py-1.5 transition-colors border-l border-gray-200 ${
-            useGeneralAI
-              ? "bg-blue-600 text-white font-medium"
-              : "bg-white text-gray-600 hover:bg-gray-50"
-          }`}
-        >
-          🌍 Documents + AI
-        </button>
+        {buttons.map((btn, idx) => (
+          <button
+            key={btn.value}
+            type="button"
+            onClick={() => onChange(btn.value)}
+            className={`px-3 py-1.5 transition-colors ${
+              idx > 0 ? "border-l border-gray-200" : ""
+            } ${
+              mode === btn.value
+                ? "bg-blue-600 text-white font-medium"
+                : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {btn.label}
+          </button>
+        ))}
       </div>
     </div>
   );

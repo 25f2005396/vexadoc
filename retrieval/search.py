@@ -28,14 +28,19 @@ def _default_top_k(top_k: int = None) -> int:
 
 
 # ── Search Functions ───────────────────────────────────────────
-def search(query: str, top_k: int = None) -> dict[str, object]:
+def search(
+    query: str,
+    top_k: int = None,
+    document_id: str = None
+) -> dict[str, object]:
     """
-    Search across all admin documents.
-    Main search function for the knowledge base.
+    Search across admin documents.
+    If document_id is provided, searches only that document.
 
     Args:
-        query:  User's question
-        top_k:  Number of results (default from .env)
+        query:       User's question
+        top_k:       Number of results (default from .env)
+        document_id: Filter to active document (optional)
 
     Returns:
         Dict with query, results, and count
@@ -43,19 +48,29 @@ def search(query: str, top_k: int = None) -> dict[str, object]:
     if not query or not query.strip():
         return _build_response(query, [])
 
-    results = retrieve(query, top_k=_default_top_k(top_k), source_type="admin")
+    results = retrieve(
+        query,
+        top_k=_default_top_k(top_k),
+        source_type="admin",
+        document_id=document_id
+    )
     return _build_response(query, results)
 
 
-def search_user_docs(query: str, owner_id: str, top_k: int = None) -> dict[str, object]:
+def search_user_docs(
+    query: str,
+    owner_id: str,
+    top_k: int = None,
+    document_id: str = None
+) -> dict[str, object]:
     """
     Search only documents uploaded by a specific user.
-    Used for Pattern 2 (user uploads their own document).
 
     Args:
-        query:    User's question
-        owner_id: The user's ID
-        top_k:    Number of results (default from .env)
+        query:       User's question
+        owner_id:    The user's ID
+        top_k:       Number of results (default from .env)
+        document_id: Filter to active document (optional)
 
     Returns:
         Dict with query, results, and count
@@ -66,7 +81,12 @@ def search_user_docs(query: str, owner_id: str, top_k: int = None) -> dict[str, 
     if not owner_id:
         raise ValueError("owner_id is required for user document search.")
 
-    results = retrieve(query, top_k=_default_top_k(top_k), owner_id=owner_id)
+    results = retrieve(
+        query,
+        top_k=_default_top_k(top_k),
+        owner_id=owner_id,
+        document_id=document_id
+    )
     return _build_response(query, results)
 
 
