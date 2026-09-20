@@ -3,25 +3,27 @@ Vexadoc — Embedder
 Converts text chunks into vector embeddings using Sentence Transformers.
 
 Features:
-- Lazy loading (loads model into memory only when first required)
-- Explicit CPU device placement for memory efficiency
+- Lazy loading (PyTorch/SentenceTransformers imported only on first query)
+- Explicit CPU device placement
 - Batch embedding
 - Input validation & error handling
 """
 
 import os
-from sentence_transformers import SentenceTransformer
 
 _model = None
 
 
-def _get_model() -> SentenceTransformer:
+def _get_model():
     """
     Lazy loader for the SentenceTransformer model.
-    Loads the model on CPU only when called for the first time.
+    Deferred import prevents loading PyTorch into RAM during app startup.
     """
     global _model
     if _model is None:
+        # Deferred import so startup memory stays under 50MB
+        from sentence_transformers import SentenceTransformer
+
         model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
         try:
             print(f"Loading embedding model ({model_name}) on CPU...")
