@@ -10,6 +10,11 @@ const TIMEOUT_MS = 60000; // 60 seconds for LLM responses
 
 export type AnswerMode = "documents" | "ai" | "hybrid";
 
+export interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
 export interface Citation {
   source_number: number;
   file_name: string;
@@ -50,6 +55,7 @@ export interface StreamQueryMeta {
 
 export interface QueryDocumentsStreamParams {
   query: string;
+  history?: ChatMessage[];
   topK?: number;
   mode?: AnswerMode;
   documentId?: string | null;
@@ -91,6 +97,7 @@ export const STREAM_METADATA_MARKER = "\u241E__VEXADOC_STREAM_META__\u241E";
 
 export async function queryDocuments(
   query: string,
+  history: ChatMessage[] = [],
   top_k: number = 5,
   mode: AnswerMode = "documents",
   document_id: string | null = null
@@ -100,6 +107,7 @@ export async function queryDocuments(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       query,
+      history,
       top_k,
       source_type: "admin",
       mode,
@@ -111,6 +119,7 @@ export async function queryDocuments(
 
 export async function queryDocumentsStream({
   query,
+  history = [],
   topK = 5,
   mode = "documents",
   documentId = null,
@@ -176,6 +185,7 @@ export async function queryDocumentsStream({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         query,
+        history,
         top_k: topK,
         source_type: "admin",
         mode,
@@ -230,7 +240,6 @@ export async function queryDocumentsStream({
       onDone({ citations, answer_source });
     }
   } catch (err) {
-    // User stopped — rethrow as AbortError so page.tsx can handle silently
     if (err instanceof Error && err.name === "AbortError") {
       throw err;
     }

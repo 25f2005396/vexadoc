@@ -1,16 +1,19 @@
 /**
  * Vexadoc — Main Chat Page
+ * Supports dark mode, mobile responsiveness, and keyboard shortcuts.
  */
 
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Sun, Moon, Menu, X, FolderOpen, Plus } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import ChatWindow, { Message } from "@/components/ChatWindow";
 import ChatInput from "@/components/ChatInput";
 import UploadButton from "@/components/UploadButton";
 import KnowledgeToggle from "@/components/KnowledgeToggle";
-import { queryDocumentsStream, checkHealth, AnswerMode } from "@/lib/api";
+import DocumentModal from "@/components/DocumentModal";
+import { queryDocumentsStream, checkHealth, AnswerMode, ChatMessage, Document } from "@/lib/api";
 import {
   Conversation,
   createConversation,
@@ -28,17 +31,39 @@ export default function Home() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
+  // ── State ──────────────────────────────────────────────────
   const [isLoading, setIsLoading] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
   const [mode, setMode] = useState<AnswerMode>("documents");
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const [activeDocumentName, setActiveDocumentName] = useState<string | null>(null);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // Derived: the currently active conversation and its messages.
   const activeConversation =
     conversations.find((c) => c.id === activeConversationId) ?? null;
   const messages = activeConversation?.messages ?? [];
+
+  // ── Initialize Theme on mount ──────────────────────────────
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem("vexadoc-theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const shouldBeDark = savedTheme === "dark" || (savedTheme !== "light" && prefersDark);
+      setIsDarkMode(shouldBeDark);
+      document.documentElement.classList.toggle("dark", shouldBeDark);
+    } catch {}
+  }, []);
+
+  const toggleTheme = () => {
+    const nextDark = !isDarkMode;
+    setIsDarkMode(nextDark);
+    document.documentElement.classList.toggle("dark", nextDark);
+    localStorage.setItem("vexadoc-theme", nextDark ? "dark" : "light");
+  };
 
   // ── Restore conversations from localStorage on load ────────
   useEffect(() => {
@@ -80,13 +105,59 @@ export default function Home() {
   }, [activeConversationId, hydrated]);
 
   // ── Stop generation ────────────────────────────────────────
-  const handleStop = () => {
+  const handleStop = useCallback(() => {
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  // ── New chat ───────────────────────────────────────────────
+  const handleNewChat = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsLoading(false);
+
+    const fresh = createConversation();
+    setConversations((prev) => [fresh, ...prev]);
+    setActiveConversationId(fresh.id);
+    setIsMobileSidebarOpen(false);
+  }, []);
+
+  // ── Global Keyboard Shortcuts ──────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+K / Cmd+K -> New Chat
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        handleNewChat();
+        toast("New chat started (Ctrl+K)", { icon: "✨" });
+      }
+
+      // Ctrl+Shift+D / Cmd+Shift+D -> Toggle Document Manager
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        setIsDocModalOpen((prev) => !prev);
+      }
+
+      // Escape -> Close Modals / Stop Generation
+      if (e.key === "Escape") {
+        if (isDocModalOpen) {
+          setIsDocModalOpen(false);
+        } else if (isMobileSidebarOpen) {
+          setIsMobileSidebarOpen(false);
+        } else if (isLoading) {
+          handleStop();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleNewChat, handleStop, isDocModalOpen, isMobileSidebarOpen, isLoading]);
 
   // ── Send message (streaming) ───────────────────────────────
   const handleSend = async (query: string) => {
@@ -97,6 +168,11 @@ export default function Home() {
       abortRef.current.abort();
     }
     abortRef.current = new AbortController();
+
+    const history: ChatMessage[] = messages.map((m) => ({
+      role: m.role as "user" | "assistant" | "system",
+      content: m.content,
+    }));
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -146,6 +222,7 @@ export default function Home() {
     try {
       await queryDocumentsStream({
         query,
+        history,
         topK: 5,
         mode,
         documentId: activeDocumentId,
@@ -187,23 +264,27 @@ export default function Home() {
     toast.success(`"${fileName}" is now the active document.`);
   };
 
-  // ── New chat ───────────────────────────────────────────────
-  const handleNewChat = () => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
-    }
-    setIsLoading(false);
+  // ── Document selection from manager modal ─────────────────
+  const handleSelectDocument = (doc: Document) => {
+    setActiveDocumentId(doc.document_id);
+    setActiveDocumentName(doc.file_name);
+    setIsDocModalOpen(false);
+    toast.success(`Focused on "${doc.file_name}"`);
+  };
 
-    const fresh = createConversation();
-    setConversations((prev) => [fresh, ...prev]);
-    setActiveConversationId(fresh.id);
+  // ── Document deletion callback ─────────────────────────────
+  const handleDocumentDeleted = (deletedId: string) => {
+    if (activeDocumentId === deletedId) {
+      setActiveDocumentId(null);
+      setActiveDocumentName(null);
+    }
   };
 
   // ── Switch conversation ────────────────────────────────────
   const handleSelectConversation = (id: string) => {
     if (id === activeConversationId) return;
     setActiveConversationId(id);
+    setIsMobileSidebarOpen(false);
   };
 
   // ── Pin / unpin a conversation ─────────────────────────────
@@ -264,44 +345,127 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen bg-[#F9FAFB]">
+    <div className="flex h-screen bg-[#F9FAFB] overflow-hidden">
 
-      {/* Sidebar */}
-      <Sidebar
-        conversations={conversations}
-        activeConversationId={activeConversationId}
-        onNewChat={handleNewChat}
-        onSelectConversation={handleSelectConversation}
-        onPinConversation={handlePinConversation}
-        onDeleteConversation={handleDeleteConversation}
-        onShareConversation={handleShareConversation}
-        onRenameConversation={handleRenameConversation}
-      />
+      {/* Desktop Sidebar (hidden on mobile) */}
+      <div className="hidden md:flex h-full">
+        <Sidebar
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          onNewChat={handleNewChat}
+          onSelectConversation={handleSelectConversation}
+          onPinConversation={handlePinConversation}
+          onDeleteConversation={handleDeleteConversation}
+          onShareConversation={handleShareConversation}
+          onRenameConversation={handleRenameConversation}
+          onOpenDocuments={() => setIsDocModalOpen(true)}
+        />
+      </div>
 
-      {/* Right side */}
+      {/* Mobile Drawer Sidebar */}
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          />
+
+          {/* Sliding Panel */}
+          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-2xl z-10 animate-in slide-in-from-left duration-200">
+            <div className="absolute top-3.5 right-3.5 z-20">
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <Sidebar
+              conversations={conversations}
+              activeConversationId={activeConversationId}
+              onNewChat={handleNewChat}
+              onSelectConversation={handleSelectConversation}
+              onPinConversation={handlePinConversation}
+              onDeleteConversation={handleDeleteConversation}
+              onShareConversation={handleShareConversation}
+              onRenameConversation={handleRenameConversation}
+              onOpenDocuments={() => {
+                setIsDocModalOpen(true);
+                setIsMobileSidebarOpen(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Right side workspace */}
       <div className="flex-1 min-w-0 flex flex-col h-full">
 
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-4 py-5 sm:px-6">
-          <div className="max-w-5xl mx-auto flex flex-col gap-4">
+        <header className="bg-white border-b border-gray-200 px-4 py-3 sm:px-6">
+          <div className="max-w-5xl mx-auto flex flex-col gap-3">
 
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-                Vexadoc
-              </h1>
-              <p className="text-xs text-gray-400 mt-1.5">
-                Ask anything. Know everything.
-              </p>
+            {/* Top row: Title + Hamburger (mobile) + Theme toggle */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {/* Mobile Menu Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  className="p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 md:hidden"
+                  aria-label="Open sidebar"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
+
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
+                    Vexadoc
+                  </h1>
+                  <p className="text-xs text-gray-400">
+                    Ask anything. Know everything.
+                  </p>
+                </div>
+              </div>
+
+              {/* Theme & Doc Manager Shortcut icons */}
+              <div className="flex items-center gap-1 sm:gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDocModalOpen(true)}
+                  className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Document Manager (Ctrl+Shift+D)"
+                >
+                  <FolderOpen className="w-5 h-5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                  aria-label="Toggle theme"
+                >
+                  {isDarkMode ? (
+                    <Sun className="w-5 h-5 text-amber-500" />
+                  ) : (
+                    <Moon className="w-5 h-5 text-gray-600" />
+                  )}
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            {/* Controls Row: Mode toggle + Active Doc + Upload */}
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
 
               {/* Active document indicator */}
               {activeDocumentName && (
                 <span className="flex items-center gap-1.5 h-9 text-xs
                                  text-gray-600 bg-gray-50 border border-gray-200
-                                 px-3.5 rounded-full transition-all duration-200 ease-in-out">
-                  📄 {activeDocumentName}
+                                 px-3 rounded-full truncate max-w-[200px] sm:max-w-xs transition-all duration-200">
+                  <span className="truncate">📄 {activeDocumentName}</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -309,8 +473,7 @@ export default function Home() {
                       setActiveDocumentName(null);
                       toast.success("Active document cleared.");
                     }}
-                    className="text-gray-400 hover:text-gray-600 ml-1
-                               transition-colors duration-200 ease-in-out"
+                    className="text-gray-400 hover:text-gray-600 shrink-0 ml-1"
                     aria-label="Clear active document"
                   >
                     ✕
@@ -324,7 +487,7 @@ export default function Home() {
                 onChange={setMode}
               />
 
-              {/* Upload */}
+              {/* Upload Button */}
               <div className="sm:ml-auto">
                 <UploadButton onUploadSuccess={handleUploadSuccess} />
               </div>
@@ -333,55 +496,62 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Main workspace */}
-        <main className="flex-1 min-h-0 px-4 py-6 sm:px-6 sm:py-8">
+        {/* Main chat workspace */}
+        <main className="flex-1 min-h-0 px-3 py-4 sm:px-6 sm:py-6 overflow-hidden">
           <div className="max-w-5xl mx-auto h-full flex flex-col">
             <div className="flex-1 min-h-0 bg-white border border-gray-200
                             rounded-2xl shadow-sm overflow-hidden flex flex-col">
               {messages.length === 0 ? (
 
                 <div className="flex-1 flex flex-col items-center justify-center
-                                text-center px-6 py-12">
+                                text-center px-4 py-8 sm:py-12 overflow-y-auto">
 
                   {/* Icon */}
-                  <div className="w-16 h-16 rounded-2xl bg-gray-50 border border-gray-200
-                                  flex items-center justify-center mb-6 text-3xl">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gray-50 border border-gray-200
+                                  flex items-center justify-center mb-4 sm:mb-6 text-2xl sm:text-3xl">
                     📄
                   </div>
 
                   {/* Heading */}
-                  <h2 className="text-xl font-semibold text-gray-800 mb-2">
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-1.5">
                     Welcome to Vexadoc
                   </h2>
 
                   {/* Subtitle */}
-                  <p className="text-sm text-gray-400 max-w-xs mb-8">
+                  <p className="text-xs sm:text-sm text-gray-400 max-w-xs mb-6 sm:mb-8">
                     Upload a document or start chatting with AI.
                   </p>
 
                   {/* Feature bullets */}
-                  <div className="flex flex-col gap-3 text-left w-full max-w-xs">
+                  <div className="flex flex-col gap-2.5 text-left w-full max-w-xs">
                     <div className="flex items-center gap-3 bg-gray-50 border border-gray-100
-                                    rounded-xl px-4 py-3">
+                                    rounded-xl px-3.5 py-2.5">
                       <span className="text-base">📎</span>
-                      <span className="text-sm text-gray-600">
+                      <span className="text-xs sm:text-sm text-gray-600">
                         Upload PDF or DOCX files
                       </span>
                     </div>
                     <div className="flex items-center gap-3 bg-gray-50 border border-gray-100
-                                    rounded-xl px-4 py-3">
+                                    rounded-xl px-3.5 py-2.5">
                       <span className="text-base">💬</span>
-                      <span className="text-sm text-gray-600">
+                      <span className="text-xs sm:text-sm text-gray-600">
                         Ask questions in plain English
                       </span>
                     </div>
                     <div className="flex items-center gap-3 bg-gray-50 border border-gray-100
-                                    rounded-xl px-4 py-3">
+                                    rounded-xl px-3.5 py-2.5">
                       <span className="text-base">📌</span>
-                      <span className="text-sm text-gray-600">
+                      <span className="text-xs sm:text-sm text-gray-600">
                         Get cited answers with sources
                       </span>
                     </div>
+                  </div>
+
+                  {/* Keyboard shortcut tips on desktop */}
+                  <div className="hidden sm:flex items-center gap-4 mt-8 text-[11px] text-gray-400">
+                    <span><kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-200">Ctrl+K</kbd> New Chat</span>
+                    <span><kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-200">Ctrl+Shift+D</kbd> Docs</span>
+                    <span><kbd className="px-1.5 py-0.5 bg-gray-100 rounded border border-gray-200">Esc</kbd> Stop</span>
                   </div>
 
                 </div>
@@ -393,7 +563,7 @@ export default function Home() {
           </div>
         </main>
 
-        {/* Input */}
+        {/* Input area */}
         <ChatInput
           onSend={handleSend}
           onStop={handleStop}
@@ -401,6 +571,20 @@ export default function Home() {
         />
 
       </div>
+
+      {/* Document Manager Modal */}
+      <DocumentModal
+        isOpen={isDocModalOpen}
+        onClose={() => setIsDocModalOpen(false)}
+        activeDocumentId={activeDocumentId}
+        onSelectDocument={handleSelectDocument}
+        onClearActiveDocument={() => {
+          setActiveDocumentId(null);
+          setActiveDocumentName(null);
+          toast.success("Active document cleared.");
+        }}
+        onDocumentDeleted={handleDocumentDeleted}
+      />
     </div>
   );
 }

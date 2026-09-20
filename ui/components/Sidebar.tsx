@@ -1,6 +1,6 @@
 /**
  * Vexadoc — Sidebar
- * Left navigation panel: conversation history (pinned/recent) + search.
+ * Left navigation panel: conversation history (pinned/recent) + search + documents.
  */
 
 "use client";
@@ -17,6 +17,7 @@ import {
   Plus,
   Share2,
   Trash2,
+  FolderOpen,
 } from "lucide-react";
 import { Conversation } from "@/lib/conversations";
 
@@ -192,6 +193,7 @@ interface SidebarProps {
   onDeleteConversation: (id: string) => void;
   onShareConversation: (id: string) => void;
   onRenameConversation: (id: string, newTitle: string) => void;
+  onOpenDocuments: () => void;
 }
 
 export default function Sidebar({
@@ -203,6 +205,7 @@ export default function Sidebar({
   onDeleteConversation,
   onShareConversation,
   onRenameConversation,
+  onOpenDocuments,
 }: SidebarProps) {
   const [searchValue, setSearchValue] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -328,6 +331,19 @@ export default function Sidebar({
             </p>
           </div>
         )}
+      </div>
+
+      {/* Documents Footer */}
+      <div className="px-2 py-2 border-t border-gray-100">
+        <button
+          type="button"
+          onClick={onOpenDocuments}
+          className="w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm
+                     text-gray-700 hover:bg-gray-100 transition-colors duration-200"
+        >
+          <FolderOpen className="w-4 h-4 text-gray-500" />
+          Documents
+        </button>
       </div>
     </aside>
   );

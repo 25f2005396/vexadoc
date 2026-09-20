@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
@@ -26,10 +27,34 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* Apply the saved theme before the page becomes visible. */}
+        <Script
+          id="vexadoc-theme-bootstrap"
+          strategy="beforeInteractive"
+        >{`
+          (function () {
+            try {
+              var savedTheme = localStorage.getItem("vexadoc-theme");
+              var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+              var shouldUseDark =
+                savedTheme === "dark" ||
+                (savedTheme !== "light" && prefersDark);
+
+              document.documentElement.classList.toggle("dark", shouldUseDark);
+            } catch (error) {
+              // Ignore localStorage or matchMedia errors.
+            }
+          })();
+        `}</Script>
+      </head>
+
       <body className="min-h-full flex flex-col">
         {children}
+
         <Toaster
           position="top-right"
           toastOptions={{
