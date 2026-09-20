@@ -1,32 +1,38 @@
 """
 Vexadoc — Embedder
-Converts text chunks into vector embeddings using
-Sentence Transformers.
+Converts text chunks into vector embeddings using Sentence Transformers.
+
 Features:
-- Loads model only once
+- Lazy loading (loads model into memory only when first required)
+- Explicit CPU device placement for memory efficiency
 - Batch embedding
-- Error handling
-- Input validation
-- Progress bar
-- Configurable model name
+- Input validation & error handling
 """
 
 import os
 from sentence_transformers import SentenceTransformer
 
-# --------------------------------------------------
-# Configuration
-# --------------------------------------------------
-MODEL_NAME = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+_model = None
 
-try:
-    print(f"Loading embedding model: {MODEL_NAME}")
-    model = SentenceTransformer(MODEL_NAME)
-    print("Embedding model loaded successfully.")
-except Exception as e:
-    raise RuntimeError(
-        f"Failed to load embedding model '{MODEL_NAME}'."
-    ) from e
+
+def _get_model() -> SentenceTransformer:
+    """
+    Lazy loader for the SentenceTransformer model.
+    Loads the model on CPU only when called for the first time.
+    """
+    global _model
+    if _model is None:
+        model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        try:
+            print(f"Loading embedding model ({model_name}) on CPU...")
+            _model = SentenceTransformer(model_name, device="cpu")
+            print("Embedding model loaded successfully.")
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load embedding model '{model_name}'."
+            ) from e
+    return _model
+
 
 # --------------------------------------------------
 # Single Text Embedding
@@ -36,7 +42,9 @@ def embed_text(text: str) -> list:
         raise TypeError("Input text must be a string.")
     if not text.strip():
         raise ValueError("Input text cannot be empty.")
+
     try:
+        model = _get_model()
         embedding = model.encode(
             text,
             convert_to_numpy=True,
@@ -45,6 +53,7 @@ def embed_text(text: str) -> list:
         return embedding.tolist()
     except Exception as e:
         raise RuntimeError("Failed to generate embedding.") from e
+
 
 # --------------------------------------------------
 # Batch Chunk Embedding
@@ -64,11 +73,12 @@ def embed_chunks(chunks: list) -> list:
         texts.append(chunk["text"])
 
     try:
+        model = _get_model()
         embeddings = model.encode(
             texts,
             convert_to_numpy=True,
             normalize_embeddings=True,
-            show_progress_bar=True
+            show_progress_bar=False
         )
         for chunk, embedding in zip(chunks, embeddings):
             chunk["embedding"] = embedding.tolist()
