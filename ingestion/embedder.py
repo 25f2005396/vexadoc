@@ -1,5 +1,5 @@
-"""
-Vexadoc — Embedder
+ï»¿"""
+Vexadoc - Embedder
 Converts text chunks into vector embeddings using Sentence Transformers.
 
 Features:
