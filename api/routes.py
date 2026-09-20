@@ -237,9 +237,11 @@ def _resolve_query_pipeline(request: QueryRequest):
     Returns:
         (direct_answer, prompt, citations, chunks_used, answer_source)
     """
+    history = request.history  # ← NEW: extract conversation history
+
     # ── Mode: AI Only ──────────────────────────────────────
     if request.mode == "ai":
-        prompt = build_ai_prompt(request.query)
+        prompt = build_ai_prompt(request.query, history=history)  # ← UPDATED
         return None, prompt, [], 0, "ai"
 
     summary_query = is_summary_query(request.query)
@@ -276,7 +278,10 @@ def _resolve_query_pipeline(request: QueryRequest):
                 "I couldn't find that information in the uploaded documents.",
                 None, [], 0, "not_found"
             )
-        prompt = build_document_summary_prompt(chunks) if summary_query else build_prompt(request.query, chunks)
+        if summary_query:
+            prompt = build_document_summary_prompt(chunks)
+        else:
+            prompt = build_prompt(request.query, chunks, history=history)  # ← UPDATED
         citations = build_citations(chunks)
         return None, prompt, citations, len(chunks), "documents"
 
@@ -290,7 +295,7 @@ def _resolve_query_pipeline(request: QueryRequest):
                 )
             prompt = build_hybrid_document_summary_prompt(chunks)
         else:
-            prompt = build_hybrid_prompt(request.query, chunks)
+            prompt = build_hybrid_prompt(request.query, chunks, history=history)  # ← UPDATED
         citations = build_citations(chunks) if chunks else []
         return None, prompt, citations, len(chunks), "hybrid"
 
@@ -350,9 +355,6 @@ def query(request: QueryRequest):
 
 # ── Query (Streaming) ──────────────────────────────────────────
 
-# Common headers for the SSE-style response: disable proxy/browser
-# buffering so tokens reach the client as soon as they're yielded
-# instead of being held back until the response completes.
 _STREAM_HEADERS = {
     "Cache-Control": "no-cache",
     "Connection": "keep-alive",
@@ -401,14 +403,10 @@ def query_stream(request: QueryRequest):
         try:
             for token in generate_stream(prompt):
                 yield token
-                # Yield control back to the event loop after every token
-                # so Starlette/uvicorn can flush it immediately instead
-                # of batching multiple tokens into one write.
                 await asyncio.sleep(0)
         except RuntimeError as e:
             yield f"\n\n[Error: {e}]"
         finally:
-            # Always append metadata at end of stream
             yield STREAM_METADATA_MARKER + metadata_payload
 
     return StreamingResponse(

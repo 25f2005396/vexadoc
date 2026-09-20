@@ -2,18 +2,22 @@
 Vexadoc — FastAPI Entry Point
 Start with: uvicorn api.main:app --reload
 """
+import os
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
 from api.routes import router
+
+load_dotenv()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Starting Vexadoc...")
+    print("🚀 Starting Vexadoc API...")
     yield
-    print("Shutting down Vexadoc...")
+    print("🛑 Shutting down Vexadoc API...")
 
 
 app = FastAPI(
@@ -25,12 +29,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ── Dynamic CORS configuration ────────────────────────────────
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url:
+    allowed_origins.append(frontend_url.rstrip("/"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=["*"],  # Allows local dev, Render, and Vercel domains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

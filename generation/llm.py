@@ -49,7 +49,7 @@ def generate(prompt: str) -> str:
 
     try:
         response = client.chat.completions.create(
-            model=os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
+            model=os.getenv("LLM_MODEL", "openai/gpt-oss-120b"),
             max_tokens=int(os.getenv("LLM_MAX_TOKENS", 2048)),
             temperature=0.2,
             messages=[{"role": "user", "content": prompt}]
@@ -83,7 +83,7 @@ def generate_stream(prompt: str):
 
     try:
         stream = client.chat.completions.create(
-            model=os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
+            model=os.getenv("LLM_MODEL", "openai/gpt-oss-120b"),
             max_tokens=int(os.getenv("LLM_MAX_TOKENS", 2048)),
             temperature=0.2,
             messages=[{"role": "user", "content": prompt}],

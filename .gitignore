@@ -1,12 +1,21 @@
 # Python
 venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+.pytest_cache/
 
-# Environment
+# Environment - NEVER commit real keys
 .env
+.env.local
+.env.*.local
+ui/.env*.local
+
+# Keep this committed - it has no secrets
+!.env.example
 
 # Local data
 data/raw_docs/
@@ -19,6 +28,7 @@ data/chroma_db/
 
 # Next.js
 ui/.next/
+ui/out/
 
 # Node modules
 node_modules/

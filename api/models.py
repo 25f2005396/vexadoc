@@ -3,14 +3,23 @@ Vexadoc — API Models
 Request and response schemas using Pydantic.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 
 
 # ── Request Models ─────────────────────────────────────────────
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+
+
 class QueryRequest(BaseModel):
     query: str
+    history: Optional[List[ChatMessage]] = Field(
+        default_factory=list,
+        description="Previous conversation messages for context"
+    )
     top_k: Optional[int] = 5
     source_type: Optional[str] = "admin"
     owner_id: Optional[str] = None

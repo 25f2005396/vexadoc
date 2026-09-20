@@ -1,7 +1,7 @@
 """
 Vexadoc — Search
 Higher-level search functions built on top of retriever.py.
-This is what the API and UI will call directly.
+This is what the API and UI call directly.
 
 Usage:
     from retrieval.search import search
@@ -9,11 +9,12 @@ Usage:
 """
 
 import os
+from typing import Optional, Dict, Any
 from retrieval.retriever import retrieve
 
 
 # ── Helper ─────────────────────────────────────────────────────
-def _build_response(query: str, results: list) -> dict[str, object]:
+def _build_response(query: str, results: list) -> Dict[str, Any]:
     """Build a standard search response dict."""
     return {
         "query":   query,
@@ -22,19 +23,21 @@ def _build_response(query: str, results: list) -> dict[str, object]:
     }
 
 
-def _default_top_k(top_k: int = None) -> int:
+def _default_top_k(top_k: Optional[int] = None) -> int:
     """Return top_k from argument or fall back to .env value."""
-    return top_k or int(os.getenv("RETRIEVAL_TOP_K", 5))
+    if top_k is not None:
+        return top_k
+    return int(os.getenv("RETRIEVAL_TOP_K", "5"))
 
 
 # ── Search Functions ───────────────────────────────────────────
 def search(
     query: str,
-    top_k: int = None,
-    document_id: str = None
-) -> dict[str, object]:
+    top_k: Optional[int] = None,
+    document_id: Optional[str] = None
+) -> Dict[str, Any]:
     """
-    Search across admin documents.
+    Hybrid search across admin documents.
     If document_id is provided, searches only that document.
 
     Args:
@@ -60,11 +63,11 @@ def search(
 def search_user_docs(
     query: str,
     owner_id: str,
-    top_k: int = None,
-    document_id: str = None
-) -> dict[str, object]:
+    top_k: Optional[int] = None,
+    document_id: Optional[str] = None
+) -> Dict[str, Any]:
     """
-    Search only documents uploaded by a specific user.
+    Hybrid search across documents uploaded by a specific user.
 
     Args:
         query:       User's question
@@ -90,10 +93,9 @@ def search_user_docs(
     return _build_response(query, results)
 
 
-def search_all(query: str, top_k: int = None) -> dict[str, object]:
+def search_all(query: str, top_k: Optional[int] = None) -> Dict[str, Any]:
     """
-    Search across ALL documents regardless of source_type.
-    Used by admins to search everything.
+    Hybrid search across ALL documents regardless of source_type.
 
     Args:
         query:  User's question
