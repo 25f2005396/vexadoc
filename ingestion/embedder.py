@@ -1,5 +1,5 @@
 """
-Vexadoc â€” Embedder
+Vexadoc — Embedder
 Converts text chunks into vector embeddings using Sentence Transformers.
 
 Features:
@@ -21,7 +21,6 @@ def _get_model():
     """
     global _model
     if _model is None:
-        # Deferred import so startup memory stays under 50MB
         from sentence_transformers import SentenceTransformer
 
         model_name = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
@@ -36,9 +35,6 @@ def _get_model():
     return _model
 
 
-# --------------------------------------------------
-# Single Text Embedding
-# --------------------------------------------------
 def embed_text(text: str) -> list:
     if not isinstance(text, str):
         raise TypeError("Input text must be a string.")
@@ -57,9 +53,6 @@ def embed_text(text: str) -> list:
         raise RuntimeError("Failed to generate embedding.") from e
 
 
-# --------------------------------------------------
-# Batch Chunk Embedding
-# --------------------------------------------------
 def embed_chunks(chunks: list) -> list:
     if not isinstance(chunks, list):
         raise TypeError("Chunks must be a list.")
